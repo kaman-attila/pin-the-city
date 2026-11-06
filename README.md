@@ -76,6 +76,8 @@ import/   Rust tool that turns the GeoNames dump into SQL files for D1
    cargo run --release
    ```
 
+   Cities whose spelling differs too much from the map's (Ulan Bator and Ulaanbaatar, Akhnūr and Akhnoor) stay unmatched. `python fetch_map_names.py --retry-empty` checks those again against GeoNames' alternative names and against the nearest town within 3 km, and writes `data/map_names_retry.tsv`, which you merge into `data/map_names.tsv`. Before loading the result, make sure the next import keeps every name id and round pool the same: a new spelling that matches another place's name merges the two groups and moves the ids.
+
    The second run also writes `renames_*.sql`, which updates the names in an existing database. Rounds pick their cities from `round_names`: the most famous cities come first, and the later rounds are weighted so a few countries don't take over. Towns under 50,000 people, except capitals, have their Wikipedia count scaled down, so a small town with many bot-written articles doesn't land in the easy rounds. Places count as the same name when either their GeoNames spelling or their map spelling matches.
 
 4. Only when the borders need updating: `api/data/borders.bin` is committed and compiled into the Worker, which uses it to give a hidden bonus when a pin lands in the right country. To rebuild it, download [`ne_50m_admin_0_countries.geojson`](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson) into `import/data/borders/` and run `python build_borders.py`. Each border piece gets the GeoNames country code that most of the cities inside it use, so codes like French Guiana (`GF`) match the city data.

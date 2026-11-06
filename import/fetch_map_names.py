@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import sys
 import threading
 import time
 import unicodedata
@@ -16,10 +17,15 @@ import mapbox_vector_tile
 TILEJSON = "https://tiles.openfreemap.org/planet"
 USER_AGENT = "PinTheCity-import/1.0 (https://pinthecity.me; contact@pinthecity.me)"
 CITIES = "out/round_cities.tsv"
+GEONAMES = "data/cities5000.txt"
 TARGET = "data/map_names.tsv"
+RETRY_TARGET = "data/map_names_retry.tsv"
 WORKERS = 4
 PASSES = [(10, 12), (8, 25)]
 MIN_SIMILARITY = 0.85
+NEARBY_KM = 3
+NEARBY_SIMILARITY = 0.6
+NEARBY_CLASSES = {"city", "town", "village"}
 FILLER_WORDS = {"city", "of", "village", "town", "municipality", "shi", "si", "gun"}
 
 
@@ -117,6 +123,7 @@ def fetch_places(url):
 
 def best_match(city, places, radius):
     best = None
+    nearest = None
     for (lat, lon), props in places:
         label = map_label(props)
         if not label:
@@ -124,31 +131,70 @@ def best_match(city, places, radius):
         distance = km((city["lat"], city["lon"]), (lat, lon))
         if distance > radius:
             continue
-        score = similarity(city["name"], label)
+        score = similarity(city["names"][0], label)
         if score >= MIN_SIMILARITY and (best is None or (score, -distance) > (best[0], -best[1])):
             best = (score, distance, label)
+        if (
+            city["nearby"]
+            and distance <= NEARBY_KM
+            and props.get("class") in NEARBY_CLASSES
+            and (nearest is None or distance < nearest[1])
+        ):
+            alternate = max((similarity(name, label) for name in city["names"][1:]), default=0.0)
+            nearest = (score, distance, label, alternate)
+    if (
+        best is None
+        and nearest is not None
+        and (nearest[0] >= NEARBY_SIMILARITY or nearest[3] >= MIN_SIMILARITY)
+    ):
+        return nearest
     return best
+
+
+def alternate_names(ids):
+    names = {}
+    with open(GEONAMES, encoding="utf-8") as f:
+        for line in f:
+            columns = line.split("\t")
+            if columns[0] in ids:
+                names[columns[0]] = [n for n in columns[3].split(",") if n]
+    return names
 
 
 def main():
     with urllib.request.urlopen(urllib.request.Request(TILEJSON, headers={"User-Agent": USER_AGENT})) as r:
         template = json.load(r)["tiles"][0]
 
+    retry = "--retry-empty" in sys.argv
     cities = []
     with open(CITIES, encoding="utf-8") as f:
         for line in f:
             gid, lat, lon, name = line.rstrip("\n").split("\t")
-            cities.append({"id": gid, "lat": float(lat), "lon": float(lon), "name": name})
+            cities.append(
+                {"id": gid, "lat": float(lat), "lon": float(lon), "names": [name], "nearby": retry}
+            )
 
-    done = set()
+    found = {}
     if os.path.exists(TARGET):
         with open(TARGET, encoding="utf-8") as f:
-            done = {line.split("\t", 1)[0] for line in f if line.strip()}
-    todo = [c for c in cities if c["id"] not in done]
+            found = dict(line.rstrip("\n").split("\t", 1) for line in f if line.strip())
+    if retry:
+        target = RETRY_TARGET
+        done = set()
+        if os.path.exists(RETRY_TARGET):
+            with open(RETRY_TARGET, encoding="utf-8") as f:
+                done = {line.split("\t", 1)[0] for line in f if line.strip()}
+        todo = [c for c in cities if found.get(c["id"]) == "" and c["id"] not in done]
+        alternates = alternate_names({c["id"] for c in todo})
+        for c in todo:
+            c["names"] += alternates.get(c["id"], [])
+    else:
+        target = TARGET
+        todo = [c for c in cities if c["id"] not in found]
     print(f"{len(cities)} round cities, {len(todo)} still to check")
 
     lock = threading.Lock()
-    out = open(TARGET, "a", encoding="utf-8")
+    out = open(target, "a", encoding="utf-8")
 
     for z, radius in PASSES:
         by_tile = collections.defaultdict(list)
@@ -188,7 +234,7 @@ def main():
         todo = unmatched
 
     out.close()
-    print(f"wrote {TARGET}")
+    print(f"wrote {target}")
 
 
 if __name__ == "__main__":

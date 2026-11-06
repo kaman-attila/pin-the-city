@@ -169,7 +169,107 @@ function dotImage(): ImageData {
   return ctx.getImageData(0, 0, size, size)
 }
 
+const SCRIPT_STARTS: [number, string][] = [
+  [0x0370, 'latin'],
+  [0x0400, 'greek'],
+  [0x0530, 'cyrillic'],
+  [0x0590, 'armenian'],
+  [0x0600, 'hebrew'],
+  [0x0700, 'arabic'],
+  [0x0780, 'syriac'],
+  [0x0800, 'thaana'],
+  [0x0900, 'other'],
+  [0x0980, 'devanagari'],
+  [0x0a00, 'bengali'],
+  [0x0a80, 'gurmukhi'],
+  [0x0b00, 'gujarati'],
+  [0x0b80, 'oriya'],
+  [0x0c00, 'tamil'],
+  [0x0c80, 'telugu'],
+  [0x0d00, 'kannada'],
+  [0x0d80, 'malayalam'],
+  [0x0e00, 'sinhala'],
+  [0x0e80, 'thai'],
+  [0x0f00, 'lao'],
+  [0x1000, 'tibetan'],
+  [0x10a0, 'myanmar'],
+  [0x1100, 'georgian'],
+  [0x1200, 'hangul'],
+  [0x13a0, 'ethiopic'],
+  [0x1780, 'other'],
+  [0x1800, 'khmer'],
+  [0x18b0, 'mongolian'],
+  [0x1e00, 'other'],
+  [0x1f00, 'latin'],
+  [0x2000, 'greek'],
+  [0x2d30, 'other'],
+  [0x2d80, 'tifinagh'],
+  [0x2e80, 'other'],
+  [0xa000, 'cjk'],
+  [0xac00, 'other'],
+  [0xd7b0, 'hangul'],
+  [0xf900, 'other'],
+  [0xfb00, 'cjk'],
+  [0xfb50, 'other'],
+  [0xfe00, 'arabic'],
+  [0xfe70, 'other'],
+  [0xff00, 'arabic'],
+]
+const MAX_LABEL_WORDS = 6
+
+function scriptOf(word: unknown): unknown {
+  const first = ['slice', word, 0, 1]
+  return [
+    'case',
+    ...SCRIPT_STARTS.flatMap(([end, script]) => [['<', first, String.fromCodePoint(end)], script]),
+    'other',
+  ]
+}
+
+function sameScriptWords(from: number): unknown {
+  if (from >= MAX_LABEL_WORDS) return ''
+  const word = ['at', from, ['var', 'words']]
+  return [
+    'case',
+    ['>', ['length', ['var', 'words']], from],
+    [
+      'case',
+      ['==', scriptOf(word), ['var', 'script']],
+      ['concat', ' ', word, sameScriptWords(from + 1)],
+      '',
+    ],
+    '',
+  ]
+}
+
+const FIRST_LOCAL_SCRIPT = [
+  'let',
+  'words',
+  ['split', ['get', 'name:nonlatin'], ' '],
+  [
+    'let',
+    'script',
+    scriptOf(['at', 0, ['var', 'words']]),
+    ['concat', ['at', 0, ['var', 'words']], sameScriptWords(1)],
+  ],
+]
+
+function limitLabelScripts(map: maplibregl.Map) {
+  const local = JSON.stringify(['get', 'name:nonlatin'])
+  for (const layer of map.getStyle().layers) {
+    if (layer.type !== 'symbol') continue
+    const field = JSON.stringify(layer.layout?.['text-field'] ?? null)
+    if (!field.includes(local)) continue
+    map.setLayoutProperty(
+      layer.id,
+      'text-field',
+      JSON.parse(field.replaceAll(local, JSON.stringify(FIRST_LOCAL_SCRIPT))),
+    )
+  }
+}
+
 function tuneStyle(map: maplibregl.Map) {
+  limitLabelScripts(map)
   for (const layer of ['boundary_2', 'boundary_disputed']) {
     setPaint(map, layer, 'line-color', '#7d869e')
     setPaint(map, layer, 'line-opacity', 1)
