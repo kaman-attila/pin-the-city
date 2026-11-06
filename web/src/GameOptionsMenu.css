@@ -17,6 +17,10 @@
   white-space: nowrap;
 }
 
+.game-options-short {
+  display: none;
+}
+
 .game-options-btn:hover {
   background: var(--surface2);
 }
@@ -60,14 +64,30 @@
 }
 
 @media (max-width: 760px) {
+  .game-options {
+    min-width: 0;
+  }
+
   .game-options-btn {
-    width: 44px;
-    padding: 0;
-    justify-content: center;
+    max-width: 100%;
+    gap: 6px;
+    padding: 0 14px 0 11px;
+    font-size: 13px;
+  }
+
+  .game-options-btn svg {
+    flex: none;
   }
 
   .game-options-summary {
     display: none;
+  }
+
+  .game-options-short {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .game-options-panel {

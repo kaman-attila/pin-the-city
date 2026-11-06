@@ -4,6 +4,14 @@ const EARTH_RADIUS_IN_METERS: f64 = 6371000.0;
 const MAX_POINTS: f64 = 1000.0;
 const FULL_POINTS_RADIUS_IN_METERS: f64 = 10000.0;
 const DECAY_IN_METERS: f64 = 1500000.0;
+const LAND_AREAS_IN_KM2: [(&str, f64); 6] = [
+    ("EU", 10.2e6),
+    ("AS", 44.6e6),
+    ("AF", 30.4e6),
+    ("NA", 24.7e6),
+    ("SA", 17.8e6),
+    ("OC", 8.5e6),
+];
 pub const TOTAL_NAMES: u32 = 59297;
 pub const BUCKET_SIZE: u32 = 250;
 pub const BUCKETS: u32 = 20;
@@ -35,13 +43,23 @@ impl SplitMix64 {
     }
 }
 
-pub fn score(distance: f64) -> u32 {
+pub fn decay_in_meters(region: &str) -> f64 {
+    let world: f64 = LAND_AREAS_IN_KM2.iter().map(|(_, area)| area).sum();
+    LAND_AREAS_IN_KM2
+        .iter()
+        .find(|(code, _)| *code == region)
+        .map_or(DECAY_IN_METERS, |(_, area)| {
+            DECAY_IN_METERS * (area / world).sqrt()
+        })
+}
+
+pub fn score(distance: f64, region: &str) -> u32 {
     if distance <= FULL_POINTS_RADIUS_IN_METERS {
         return MAX_POINTS as u32;
     }
 
-    (MAX_POINTS * (-(distance - FULL_POINTS_RADIUS_IN_METERS) / DECAY_IN_METERS).exp()).round()
-        as u32
+    let decay = decay_in_meters(region);
+    (MAX_POINTS * (-(distance - FULL_POINTS_RADIUS_IN_METERS) / decay).exp()).round() as u32
 }
 
 pub fn with_country_bonus(score: u32) -> u32 {
@@ -201,8 +219,30 @@ mod tests {
 
     #[test]
     fn full_points_inside_radius() {
-        assert_eq!(score(0.0), 1000);
-        assert_eq!(score(300.0), 1000);
+        for region in REGIONS {
+            assert_eq!(score(0.0, region), 1000);
+            assert_eq!(score(300.0, region), 1000);
+            assert_eq!(score(10_000.0, region), 1000);
+        }
+    }
+
+    #[test]
+    fn world_scoring_is_unchanged() {
+        assert_eq!(score(310_000.0, WORLD), 819);
+        assert_eq!(score(1_510_000.0, WORLD), 368);
+    }
+
+    #[test]
+    fn smaller_continents_lose_points_faster() {
+        let decays: Vec<f64> = REGIONS.iter().map(|r| decay_in_meters(r)).collect();
+        assert_eq!(decays[0], DECAY_IN_METERS);
+        assert!(decays[1..].iter().all(|&d| d < DECAY_IN_METERS));
+        assert!(decay_in_meters("OC") < decay_in_meters("EU"));
+        assert!(decay_in_meters("EU") < decay_in_meters("SA"));
+        assert!(decay_in_meters("NA") < decay_in_meters("AF"));
+        assert!(decay_in_meters("AF") < decay_in_meters("AS"));
+        assert!(score(310_000.0, "EU") < score(310_000.0, "AS"));
+        assert!(score(310_000.0, "AS") < score(310_000.0, WORLD));
     }
 
     #[test]

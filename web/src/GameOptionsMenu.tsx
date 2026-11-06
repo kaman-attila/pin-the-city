@@ -3,6 +3,7 @@ import { SlidersIcon } from './icons'
 import {
   bestKind,
   describeOptions,
+  describeOptionsShort,
   DIFFICULTIES,
   regionLabel,
   REGIONS,
@@ -65,6 +66,7 @@ export default function GameOptionsMenu({ options, onChange, locked }: Props) {
       >
         <SlidersIcon size={20} strokeWidth={2.2} />
         <span className="game-options-summary">{describeOptions(options)}</span>
+        <span className="game-options-short">{describeOptionsShort(options)}</span>
       </button>
 
       {open && (

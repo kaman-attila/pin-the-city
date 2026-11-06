@@ -941,10 +941,10 @@ async fn score_guess(
         .ok_or_else(|| AppError::Internal(format!("name {} has no cities", name.id)))?;
 
     let scored_m = limits_m.unwrap_or(centre_m);
-    let mut score = game::score(scored_m);
+    let mut score = game::score(scored_m, region);
     let city_limits = match limits_m {
         Some(m) if m <= 0.0 => Some("inside"),
-        Some(m) if game::score(m) == game::score(0.0) => Some("near"),
+        Some(m) if game::score(m, region) == game::score(0.0, region) => Some("near"),
         Some(m) if m < centre_m => Some("measured"),
         _ => None,
     };
@@ -1688,7 +1688,7 @@ async fn load_profile(db: &D1Database, user_id: u32) -> std::result::Result<Prof
         .await?
         .results()?;
     let region_bests: Vec<RegionBest> = db
-        .prepare("SELECT region, best FROM user_region_bests WHERE user_id = ?1 ORDER BY region")
+        .prepare("SELECT region, best FROM user_region_bests WHERE user_id = ?1 ORDER BY best DESC, region")
         .bind(&[user_id.into()])?
         .all()
         .await?

@@ -21,8 +21,7 @@ type Props = {
 type LineData = Feature | FeatureCollection
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
-const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron'
-const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark'
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
 
 function unwrapLon(lon: number, nearLon: number): number {
   if (lon - nearLon > 180) return lon - 360
@@ -57,22 +56,120 @@ const BORDER_WIDTH: maplibregl.ExpressionSpecification = [
 ]
 
 type PaintArgs = Parameters<maplibregl.Map['setPaintProperty']>
-type LayoutArgs = Parameters<maplibregl.Map['setLayoutProperty']>
 
 function setPaint(map: maplibregl.Map, layer: string, property: PaintArgs[1], value: PaintArgs[2]) {
   if (map.getLayer(layer)) map.setPaintProperty(layer, property, value)
 }
 
-function setLayout(
-  map: maplibregl.Map,
-  layer: string,
-  property: LayoutArgs[1],
-  value: LayoutArgs[2],
-) {
-  if (map.getLayer(layer)) map.setLayoutProperty(layer, property, value)
+type PaintEntry = [layer: string, property: PaintArgs[1], value: PaintArgs[2]]
+
+const LAND = '#1a2343'
+const WATER = '#0c1229'
+const ROAD = '#38446f'
+const ROAD_MINOR = '#2a3459'
+const ROAD_CASING = '#252f52'
+const ROAD_SUBTLE = 'rgba(46,57,95,0.53)'
+const TEXT_STRONG = '#e8ebf6'
+const TEXT_SOFT = '#b3bad3'
+const TEXT_FAINT = '#949cbb'
+const WATER_HALO = 'rgba(12,18,41,0.7)'
+const LIGHT_DOT = 'circle_11_black'
+const DARK_DOT = 'city_dot_dark'
+
+const ROAD_FADE: maplibregl.ExpressionSpecification = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  5.8,
+  ROAD_SUBTLE,
+  6,
+  ROAD,
+]
+
+function textPaint(layers: string[], color: string, halo?: string): PaintEntry[] {
+  return layers.flatMap((layer) => {
+    const entries: PaintEntry[] = [[layer, 'text-color', color]]
+    if (halo) entries.push([layer, 'text-halo-color', halo])
+    return entries
+  })
 }
 
-function tuneLightStyle(map: maplibregl.Map) {
+const DARK_PAINT: PaintEntry[] = [
+  ['background', 'background-color', LAND],
+  ['park', 'fill-color', '#1f2949'],
+  ['water', 'fill-color', WATER],
+  ['landcover_ice_shelf', 'fill-color', '#242e52'],
+  ['landcover_glacier', 'fill-color', '#242e52'],
+  ['landuse_residential', 'fill-color', '#1d2647'],
+  ['landcover_wood', 'fill-color', '#222c50'],
+  ['waterway', 'line-color', '#111a38'],
+  ['building', 'fill-color', '#222b4d'],
+  ['building', 'fill-outline-color', '#2a3459'],
+  ['tunnel_motorway_casing', 'line-color', ROAD_CASING],
+  ['tunnel_motorway_inner', 'line-color', ROAD_MINOR],
+  ['aeroway-taxiway', 'line-color', ROAD_MINOR],
+  ['aeroway-runway-casing', 'line-color', ROAD_MINOR],
+  ['aeroway-area', 'fill-color', '#212a4b'],
+  ['aeroway-runway', 'line-color', ROAD],
+  ['road_area_pier', 'fill-color', LAND],
+  ['road_pier', 'line-color', LAND],
+  ['highway_path', 'line-color', ROAD_MINOR],
+  ['highway_minor', 'line-color', ROAD_MINOR],
+  ['highway_major_casing', 'line-color', ROAD_CASING],
+  ['highway_major_inner', 'line-color', ROAD],
+  ['highway_major_subtle', 'line-color', 'rgba(46,57,95,0.69)'],
+  ['highway_motorway_casing', 'line-color', ROAD_CASING],
+  ['highway_motorway_inner', 'line-color', ROAD_FADE],
+  ['highway_motorway_subtle', 'line-color', ROAD_SUBTLE],
+  ['highway_motorway_bridge_casing', 'line-color', ROAD_CASING],
+  ['highway_motorway_bridge_inner', 'line-color', ROAD_FADE],
+  ['railway_transit', 'line-color', '#2e3860'],
+  ['railway_transit_dashline', 'line-color', LAND],
+  ['railway_service', 'line-color', '#2e3860'],
+  ['railway_service_dashline', 'line-color', LAND],
+  ['railway', 'line-color', '#2e3860'],
+  ['railway_dashline', 'line-color', LAND],
+  ['boundary_3', 'line-color', '#4a5683'],
+  ['boundary_2', 'line-color', '#7c88b3'],
+  ['boundary_disputed', 'line-color', '#7c88b3'],
+  ...textPaint(['waterway_line_label'], '#5f6f9c', WATER_HALO),
+  ...textPaint(['water_name_point_label', 'water_name_line_label'], '#7088c0', WATER_HALO),
+  ...textPaint(['highway-name-path', 'airport'], TEXT_FAINT, LAND),
+  ...textPaint(['highway-name-minor', 'highway-name-major'], TEXT_FAINT),
+  ...textPaint(['label_other', 'label_state'], TEXT_SOFT, LAND),
+  ...textPaint(
+    [
+      'label_village',
+      'label_town',
+      'label_city',
+      'label_city_capital',
+      'label_country_3',
+      'label_country_2',
+      'label_country_1',
+    ],
+    TEXT_STRONG,
+    LAND,
+  ),
+]
+
+function dotImage(): ImageData {
+  const size = 34
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return new ImageData(size, size)
+  ctx.beginPath()
+  ctx.arc(size / 2, size / 2, 10, 0, Math.PI * 2)
+  ctx.fillStyle = TEXT_STRONG
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = LAND
+  ctx.stroke()
+  return ctx.getImageData(0, 0, size, size)
+}
+
+function tuneStyle(map: maplibregl.Map) {
   for (const layer of ['boundary_2', 'boundary_disputed']) {
     setPaint(map, layer, 'line-color', '#7d869e')
     setPaint(map, layer, 'line-opacity', 1)
@@ -81,84 +178,36 @@ function tuneLightStyle(map: maplibregl.Map) {
   if (map.getLayer('label_country_3') && map.getLayer('label_city_capital')) {
     map.moveLayer('label_country_3', 'label_city_capital')
   }
+  if (!map.hasImage(DARK_DOT)) map.addImage(DARK_DOT, dotImage(), { pixelRatio: 2 })
 }
 
-function fixMissingIcons(map: maplibregl.Map) {
+function capturePaint(map: maplibregl.Map): PaintEntry[] {
+  return DARK_PAINT.filter(([layer]) => map.getLayer(layer)).map(([layer, property]) => [
+    layer,
+    property,
+    map.getPaintProperty(layer, property),
+  ])
+}
+
+function swapIcon(map: maplibregl.Map, from: string, to: string) {
   for (const layer of map.getStyle().layers) {
     if (layer.type !== 'symbol') continue
-    const icon = layer.layout?.['icon-image']
-    if (icon === undefined || !JSON.stringify(icon).includes('circle-11')) continue
-    const fixed = JSON.parse(JSON.stringify(icon).replaceAll('circle-11', 'circle_11'))
-    map.setLayoutProperty(layer.id, 'icon-image', fixed)
+    const icon = JSON.stringify(layer.layout?.['icon-image'] ?? null)
+    if (!icon.includes(`"${from}"`)) continue
+    map.setLayoutProperty(
+      layer.id,
+      'icon-image',
+      JSON.parse(icon.replaceAll(`"${from}"`, `"${to}"`)),
+    )
   }
 }
 
-function tuneDarkStyle(map: maplibregl.Map) {
-  fixMissingIcons(map)
-
-  for (const layer of ['boundary_country_z0-4', 'boundary_country_z5-']) {
-    if (!map.getLayer(layer)) continue
-    const filter = map.getFilter(layer) as maplibregl.ExpressionSpecification | null | undefined
-    map.setFilter(layer, ['all', ['!=', ['get', 'maritime'], 1], ...(filter ? [filter] : [])])
-    setPaint(map, layer, 'line-color', '#7a84a6')
-    setPaint(map, layer, 'line-blur', 0)
-    setPaint(map, layer, 'line-width', BORDER_WIDTH)
+function applyTheme(map: maplibregl.Map, dark: boolean, lightPaint: PaintEntry[]) {
+  for (const [layer, property, value] of dark ? DARK_PAINT : lightPaint) {
+    setPaint(map, layer, property, value)
   }
-
-  if (map.getLayer('place_other')) {
-    for (const layer of ['place_state', 'place_country_other']) {
-      if (map.getLayer(layer)) map.moveLayer(layer, 'place_other')
-    }
-  }
-  if (map.getLayer('place_country_minor') && map.getLayer('place_city_large')) {
-    map.moveLayer('place_country_minor', 'place_city_large')
-  }
-  setPaint(map, 'place_state', 'text-color', 'rgb(88,92,108)')
-
-  setPaint(map, 'place_city_large', 'text-color', '#d4d8e6')
-  setPaint(map, 'place_city', 'text-color', '#c3c8d9')
-  setPaint(map, 'place_town', 'text-color', '#a9afc3')
-  setPaint(map, 'place_village', 'text-color', '#8c93aa')
-  for (const layer of ['place_country_major', 'place_country_minor', 'place_country_other']) {
-    setPaint(map, layer, 'text-color', '#9aa1ba')
-  }
-
-  setLayout(map, 'place_city_large', 'text-size', [
-    'interpolate',
-    ['exponential', 1.2],
-    ['zoom'],
-    4,
-    13,
-    7,
-    15,
-    11,
-    19,
-  ])
-  setLayout(map, 'place_city', 'text-size', [
-    'interpolate',
-    ['exponential', 1.2],
-    ['zoom'],
-    4,
-    11,
-    7,
-    13,
-    11,
-    17,
-  ])
-  setLayout(map, 'place_town', 'text-size', [
-    'interpolate',
-    ['exponential', 1.2],
-    ['zoom'],
-    6,
-    10,
-    11,
-    14,
-  ])
-}
-
-function tuneStyle(map: maplibregl.Map) {
-  if (map.getLayer('place_state')) tuneDarkStyle(map)
-  else tuneLightStyle(map)
+  if (dark) swapIcon(map, LIGHT_DOT, DARK_DOT)
+  else swapIcon(map, DARK_DOT, LIGHT_DOT)
 }
 
 function pinElement(): HTMLElement {
@@ -190,8 +239,8 @@ export default function MapView({ guess, onMapClick, result, dark, units }: Prop
   const markerRef = useRef<maplibregl.Marker | null>(null)
   const onMapClickRef = useRef(onMapClick)
   const cityMarkersRef = useRef<maplibregl.Marker[]>([])
-  const styleUrl = dark ? DARK_STYLE : LIGHT_STYLE
-  const styleRef = useRef(styleUrl)
+  const darkRef = useRef(dark)
+  const lightPaintRef = useRef<PaintEntry[] | null>(null)
   const lineDataRef = useRef<LineData>(EMPTY)
 
   useEffect(() => {
@@ -199,26 +248,29 @@ export default function MapView({ guess, onMapClick, result, dark, units }: Prop
   })
 
   useEffect(() => {
+    darkRef.current = dark
     const map = mapRef.current
-    if (!map || styleRef.current === styleUrl) return
-    styleRef.current = styleUrl
-    map.setStyle(styleUrl, { diff: false })
-  }, [styleUrl])
+    if (map && lightPaintRef.current) applyTheme(map, dark, lightPaintRef.current)
+  }, [dark])
 
   useEffect(() => {
     if (!containerRef.current) return
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: styleRef.current,
       center: [10, 30],
       zoom: 1.5,
       attributionControl: { compact: true },
+    })
+    map.setStyle(STYLE_URL, {
+      transformStyle: (_, style) => ({ ...style, transition: { duration: 0, delay: 0 } }),
     })
     mapRef.current = map
 
     map.on('style.load', () => {
       tuneStyle(map)
+      lightPaintRef.current = capturePaint(map)
+      if (darkRef.current) applyTheme(map, true, lightPaintRef.current)
       addGuessLine(map, lineDataRef.current)
     })
 
@@ -238,6 +290,7 @@ export default function MapView({ guess, onMapClick, result, dark, units }: Prop
       cityMarkersRef.current = []
       map.remove()
       mapRef.current = null
+      lightPaintRef.current = null
     }
   }, [])
 

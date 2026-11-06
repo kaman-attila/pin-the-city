@@ -29,6 +29,11 @@ export function describeOptions({ region, level }: GameOptions): string {
   return `${regionLabel(region)} · ${DIFFICULTIES[level - 1]}`
 }
 
+export function describeOptionsShort({ region, level }: GameOptions): string {
+  if (level === null) return regionShortLabel(region)
+  return `${regionShortLabel(region)} · ${DIFFICULTIES[level - 1]}`
+}
+
 export function bestKind({ region, level }: GameOptions): 'best' | 'region' | 'none' {
   if (level !== null) return 'none'
   return region === 'world' ? 'best' : 'region'
