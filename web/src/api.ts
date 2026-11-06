@@ -14,6 +14,7 @@ export type GuessResult = {
   score: number
   closest: number
   cities: City[]
+  city_limits?: 'inside' | 'near' | 'measured' | null
 }
 
 export type NextRound = { round: number; name: string }

@@ -31,6 +31,14 @@
       content="PinTheCity: a green map pin and a city marker joined by a dashed line, 12.4 km apart"
     />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      try {
+        var t = JSON.parse(localStorage.getItem('pinthecity-settings') || '{}').theme
+        var dark =
+          t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

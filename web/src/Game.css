@@ -283,6 +283,16 @@
   color: var(--muted);
 }
 
+.result-inside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -6px;
+  color: var(--accent-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .result-note {
   display: flex;
   align-items: center;

@@ -214,6 +214,17 @@ export function ResultPanel({
         </span>
       </div>
 
+      {result.city_limits && (
+        <div className="result-inside">
+          <CheckIcon size={16} strokeWidth={2.8} />
+          {result.city_limits === 'inside'
+            ? `Inside the city limits of ${nearest.name}`
+            : result.city_limits === 'near'
+              ? `Close to the city limits of ${nearest.name}`
+              : `Points counted from the city limits of ${nearest.name}`}
+        </div>
+      )}
+
       {count > 1 && (
         <div className="result-note">
           <span className="legend-dot other" aria-hidden="true" />

@@ -101,6 +101,13 @@ struct GuessResponse {
     score: u32,
     closest: usize,
     cities: Vec<CityRow>,
+    city_limits: Option<&'static str>,
+}
+
+#[derive(Deserialize)]
+struct CityAreaRow {
+    city_id: u32,
+    shape: Vec<u8>,
 }
 
 #[derive(Serialize)]
@@ -908,22 +915,48 @@ async fn score_guess(
     if counted.is_empty() {
         counted = (0..cities.len()).collect();
     }
-    let points: Vec<(f64, f64)> = counted
+    let areas: Vec<CityAreaRow> = db
+        .prepare("SELECT city_id, shape FROM city_areas WHERE city_id BETWEEN ?1 AND ?2")
+        .bind(&[
+            name.first_city.into(),
+            (name.first_city + name.city_count - 1).into(),
+        ])?
+        .all()
+        .await?
+        .results()?;
+
+    let (closest, centre_m, limits_m) = counted
         .iter()
-        .map(|&i| (cities[i].lat, cities[i].lon))
-        .collect();
-    let (nearest, distance_m) = game::closest(lat, lon, &points)
+        .map(|&i| {
+            let city_id = name.first_city + i as u32;
+            let centre = game::distance_in_meters(lat, lon, cities[i].lat, cities[i].lon);
+            let limits = areas
+                .iter()
+                .find(|a| a.city_id == city_id)
+                .and_then(|a| borders::distance_to_area_m(lat, lon, &a.shape))
+                .map(|m| m.min(centre));
+            (i, centre, limits)
+        })
+        .min_by(|a, b| a.2.unwrap_or(a.1).total_cmp(&b.2.unwrap_or(b.1)))
         .ok_or_else(|| AppError::Internal(format!("name {} has no cities", name.id)))?;
-    let closest = counted[nearest];
-    let mut score = game::score(distance_m);
+
+    let scored_m = limits_m.unwrap_or(centre_m);
+    let mut score = game::score(scored_m);
+    let city_limits = match limits_m {
+        Some(m) if m <= 0.0 => Some("inside"),
+        Some(m) if game::score(m) == game::score(0.0) => Some("near"),
+        Some(m) if m < centre_m => Some("measured"),
+        _ => None,
+    };
     if country_bonus && borders::country_at(lat, lon) == Some(cities[closest].country.as_str()) {
         score = game::with_country_bonus(score);
     }
     Ok(GuessResponse {
-        distance_m,
+        distance_m: centre_m,
         score,
         closest,
         cities,
+        city_limits,
     })
 }
 

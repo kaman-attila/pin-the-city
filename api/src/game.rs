@@ -70,14 +70,6 @@ pub fn id_range_for_round(round: u32) -> Option<(u32, u32)> {
     }
 }
 
-pub fn closest(lat: f64, lon: f64, points: &[(f64, f64)]) -> Option<(usize, f64)> {
-    points
-        .iter()
-        .enumerate()
-        .map(|(i, &(p_lat, p_lon))| (i, distance_in_meters(lat, lon, p_lat, p_lon)))
-        .min_by(|city_a, city_b| city_a.1.total_cmp(&city_b.1))
-}
-
 pub fn daily_seed(secret: &str, date: &str) -> u64 {
     let hash = Sha256::digest(format!("{secret}:{date}"));
     u64::from_le_bytes(hash[..8].try_into().unwrap())

@@ -80,6 +80,8 @@ import/   Rust tool that turns the GeoNames dump into SQL files for D1
 
 4. Only when the borders need updating: `api/data/borders.bin` is committed and compiled into the Worker, which uses it to give a hidden bonus when a pin lands in the right country. To rebuild it, download [`ne_50m_admin_0_countries.geojson`](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson) into `import/data/borders/` and run `python build_borders.py`. Each border piece gets the GeoNames country code that most of the cities inside it use, so codes like French Guiana (`GF`) match the city data.
 
+5. City limits for the 500 largest cities: a pin anywhere inside the official city boundary scores the full 1000 points. The import writes the list to `out/largest_cities.tsv`; then run `python fetch_city_areas.py` (it needs `pip install shapely`). It finds each city's OpenStreetMap boundary through Wikidata, downloads it from Overpass, simplifies it and writes `out/city_areas.sql`. Boundaries that don't contain the city or are bigger than 1,600 km² (for example Chinese prefecture-level cities, which cover whole regions) are left out, so those cities keep the normal 10 km rule.
+
 ### 2. Set up the API
 
 Create `api/.dev.vars` (it is git-ignored):

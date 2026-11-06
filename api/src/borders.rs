@@ -69,6 +69,47 @@ impl Reader<'_> {
     }
 }
 
+type Rings = Vec<Vec<(f64, f64)>>;
+
+fn read_rings(r: &mut Reader) -> Option<Rings> {
+    let ring_count = r.varint()?;
+    let mut rings = Vec::new();
+    for _ in 0..ring_count {
+        let points = r.varint()?;
+        let mut ring = Vec::with_capacity(points.min(100_000) as usize);
+        let (mut x, mut y) = (0i64, 0i64);
+        for _ in 0..points {
+            x += r.signed()?;
+            y += r.signed()?;
+            ring.push((x as f64 / SCALE, y as f64 / SCALE));
+        }
+        rings.push(ring);
+    }
+    Some(rings)
+}
+
+pub fn distance_to_area_m(lat: f64, lon: f64, area: &[u8]) -> Option<f64> {
+    let mut r = Reader { data: area, pos: 0 };
+    let rings = read_rings(&mut r)?;
+    if r.pos != area.len() || rings.is_empty() {
+        return None;
+    }
+    let inside = rings
+        .iter()
+        .filter(|ring| inside_ring(lon, lat, ring))
+        .count()
+        % 2
+        == 1;
+    if inside {
+        return Some(0.0);
+    }
+    rings
+        .iter()
+        .flatten()
+        .map(|&(x, y)| crate::game::distance_in_meters(lat, lon, y, x))
+        .min_by(f64::total_cmp)
+}
+
 fn parse(data: &[u8]) -> Option<Vec<Polygon>> {
     let mut r = Reader { data, pos: 0 };
     if r.bytes(4)? != b"BRD2" {
@@ -78,22 +119,11 @@ fn parse(data: &[u8]) -> Option<Vec<Polygon>> {
     let mut polygons = Vec::with_capacity(count as usize);
     for _ in 0..count {
         let code: [u8; 2] = r.bytes(2)?.try_into().ok()?;
-        let ring_count = r.varint()?;
-        let mut rings = Vec::new();
+        let rings = read_rings(&mut r)?;
         let (mut min, mut max) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
-        for _ in 0..ring_count {
-            let points = r.varint()?;
-            let mut ring = Vec::with_capacity(points as usize);
-            let (mut x, mut y) = (0i64, 0i64);
-            for _ in 0..points {
-                x += r.signed()?;
-                y += r.signed()?;
-                let point = (x as f64 / SCALE, y as f64 / SCALE);
-                min = (min.0.min(point.0), min.1.min(point.1));
-                max = (max.0.max(point.0), max.1.max(point.1));
-                ring.push(point);
-            }
-            rings.push(ring);
+        for &point in rings.iter().flatten() {
+            min = (min.0.min(point.0), min.1.min(point.1));
+            max = (max.0.max(point.0), max.1.max(point.1));
         }
         polygons.push(Polygon {
             code,

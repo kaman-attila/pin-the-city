@@ -13,6 +13,7 @@ const COUNTRY_EXPONENTS: [f64; 5] = [1.0, 1.0, 0.5, 0.5, 0.5];
 const CONTINENT_MIN_ENDS: [usize; 5] = [40, 150, 400, 800, 1500];
 const CONTINENT_MAX_SHARE: [f64; 5] = [0.1, 0.25, 0.5, 0.75, 1.0];
 const UNFILTERED_RANKS: usize = 1000;
+const CITY_AREA_COUNT: usize = 500;
 const BURIED_POPULATION: u64 = 500_000;
 const SMALL_TOWN_POPULATION: u64 = 50_000;
 const WORLD: &str = "world";
@@ -548,6 +549,21 @@ fn main() -> std::io::Result<()> {
         .collect();
 
     std::fs::create_dir_all("out")?;
+    let mut largest: Vec<&(u32, City)> = city_rows.iter().collect();
+    largest.sort_by(|a, b| b.1.population.cmp(&a.1.population).then(a.0.cmp(&b.0)));
+    let largest_lines: Vec<String> = largest
+        .iter()
+        .take(CITY_AREA_COUNT)
+        .map(|(id, c)| {
+            format!(
+                "{id}\t{}\t{}\t{}\t{}\t{}",
+                c.geoname_id, c.lat, c.lon, c.population, c.name
+            )
+        })
+        .collect();
+    std::fs::write("out/largest_cities.tsv", largest_lines.join("\n") + "\n")?;
+    println!("wrote out/largest_cities.tsv");
+
     write_sql(
         "names",
         "INSERT OR IGNORE INTO names (id, name, first_city, city_count) VALUES",
